@@ -14,6 +14,8 @@ system.stderr.write('Email: ');
 var username = system.stdin.readLine();
 system.stderr.write('Password: ');
 var password = system.stdin.readLine();
+system.stderr.write('User ID: ');
+var user_id = system.stdin.readLine();
 
 casper.start('https://www.flickr.com/signin')
 
@@ -29,11 +31,17 @@ casper.then(function() {
 // }).waitForSelector("#mbr-login-greeting");
 }).wait(5000);
 
-// casper.evaluate(function(user, pass) {
-//   var usernameInput = document.getElementById("login-username");
-//   usernameInput.value = user;
-//   document.getElementById('login-signin').click();
-// }, username, password);
+window.stats = {
+  "Flickr" : {
+    "total" : 0
+
+  },
+  "Other" : {
+    "total" : 0,
+    "sources" : {}
+
+  }
+}
 
 casper.then(function() {
   this.capture('password-input.png')
@@ -50,9 +58,53 @@ casper.then(function() {
   this.capture('main.png')
 })
 
-casper.thenOpen('https://www.flickr.com/photos/spaceabstract/stats', function() {
+casper.thenOpen('https://www.flickr.com/photos/' + user_id + '/stats').wait(5000).then(function() {
   this.capture('stats.png');
-  console.log('On stats page');
-});
+
+  this.evaluate(function() {
+    console.log('checking 1')
+
+    var rows = Array.prototype.slice.apply(document.querySelectorAll('.sources-breakdown-list > .referrer-rows > .referrer-row'));
+    rows.map(function(row) {
+      console.log('checking 2')
+      console.log(rows.length);
+
+      var header = row.querySelector('.header').childNodes;
+      var views = parseInt(header[1].innerHTML);
+
+      console.log(views)
+
+      if (views > 0) {
+        var type = header[0].innerHTML;
+        if (type.indexOf('flickr') !== -1) {
+          stats["Flickr"].total += views;
+        } else if (type.indexOf('other') !== -1) {
+          stats["Other"].total += views;
+
+          var other_sources = Array.prototype.slice.apply(row.querySelector('.referrer-row-breakdown').childNodes);
+          other_sources.map(function(source) {
+            var url = source.attributes.href;
+            var views = parseInt(source.querySelector('.header').childNodes[1].innerHTML)
+            if (stats["Other"]["sources"].hasOwnProperty(url)) {
+              stats["Other"]["sources"][url] += views;
+            } else {
+              stats["Other"]["sources"][url] = views;
+            }
+          })
+
+
+
+        }
+      }
+
+    });
+  })
+}).wait(5000);
+
+casper.then(function() {
+  console.log('finished stats');
+  console.log(stats.Flickr.total)
+  console.log(stats.Other.total)
+})
 
 casper.run();

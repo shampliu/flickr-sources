@@ -31,18 +31,6 @@ casper.then(function() {
 // }).waitForSelector("#mbr-login-greeting");
 }).wait(5000);
 
-window.stats = {
-  "Flickr" : {
-    "total" : 0
-
-  },
-  "Other" : {
-    "total" : 0,
-    "sources" : {}
-
-  }
-}
-
 casper.then(function() {
   this.capture('password-input.png')
   this.evaluate(function (pass) {
@@ -58,10 +46,24 @@ casper.then(function() {
   this.capture('main.png')
 })
 
+var res = "WORKED??";
+
 casper.thenOpen('https://www.flickr.com/photos/' + user_id + '/stats').wait(5000).then(function() {
   this.capture('stats.png');
 
-  this.evaluate(function() {
+  res = this.evaluate(function() {
+    var stats = {
+      "Flickr" : {
+        "total" : 0
+
+      },
+      "Other" : {
+        "total" : 0,
+        "sources" : {}
+
+      }
+    }
+
     console.log('checking 1')
 
     var rows = Array.prototype.slice.apply(document.querySelectorAll('.sources-breakdown-list > .referrer-rows > .referrer-row'));
@@ -75,7 +77,10 @@ casper.thenOpen('https://www.flickr.com/photos/' + user_id + '/stats').wait(5000
       console.log(views)
 
       if (views > 0) {
+        console.log("Views is greater than 0")
         var type = header[0].innerHTML;
+
+
         if (type.indexOf('flickr') !== -1) {
           stats["Flickr"].total += views;
         } else if (type.indexOf('other') !== -1) {
@@ -98,13 +103,18 @@ casper.thenOpen('https://www.flickr.com/photos/' + user_id + '/stats').wait(5000
       }
 
     });
+
+    console.log(stats["Flickr"]["total"])
+    console.log(stats["Other"]["total"])
+
+    return JSON.stringify(stats);
   })
+
 }).wait(5000);
 
 casper.then(function() {
   console.log('finished stats');
-  console.log(stats.Flickr.total)
-  console.log(stats.Other.total)
-})
+  console.log(res);
+}).wait(5000)
 
 casper.run();

@@ -63,8 +63,36 @@ var stats = {
 
 casper.thenOpen('https://www.flickr.com/photos/' + user_id + '/stats').wait(4000).then(function() {
   this.capture('stats.png');
+});
 
-  res = this.evaluate(function(stats) {
+function triggerMouseEvent (node, eventType, document) {
+  var clickEvent = document.createEvent ('MouseEvents');
+  clickEvent.initEvent (eventType, true, true);
+  node.dispatchEvent (clickEvent);
+}
+
+casper.then(function() {
+  this.capture('1.png')
+  this.evaluate(function(triggerMouseEvent) {
+    var date_button = document.querySelector('.source-breakdown-misc-wrapper > .half-source-breakdown.section > .section-title > .date-picker');
+    triggerMouseEvent(date_button, 'click', document)
+
+    var prev_button = document.querySelector('button.pika-prev');
+    console.log(prev_button.innerHTML);
+    // //
+    // // if we can't go back to the previous month anymore
+    // if (prev_button == null) {
+    //   console.log('null previous button')
+    //   return;
+    // }
+    prev_button.focus();
+    triggerMouseEvent(prev_button, 'mousedown', document); // goes to previous month
+  }, triggerMouseEvent)
+}).wait(4000)
+
+casper.then(function() {
+  this.capture('2.png')
+  res = this.evaluate(function(stats, triggerMouseEvent) {
     var block;
 
     function scrapeCurrentDay(stats) {
@@ -99,14 +127,8 @@ casper.thenOpen('https://www.flickr.com/photos/' + user_id + '/stats').wait(4000
       block = false;
     }
 
-    function triggerMouseEvent (node, eventType) {
-      var clickEvent = document.createEvent ('MouseEvents');
-      clickEvent.initEvent (eventType, true, true);
-      node.dispatchEvent (clickEvent);
-    }
 
-
-    var button = document.querySelector('.source-breakdown-misc-wrapper > .half-source-breakdown.section > .section-title > .date-picker');
+    // var button = document.querySelector('.source-breakdown-misc-wrapper > .half-source-breakdown.section > .section-title > .date-picker');
 
     console.log('1');
     console.log(JSON.stringify(stats));
@@ -116,7 +138,7 @@ casper.thenOpen('https://www.flickr.com/photos/' + user_id + '/stats').wait(4000
     // while(true) {
       console.log('INSIDE WHILE');
       var date_button = document.querySelector('.source-breakdown-misc-wrapper > .half-source-breakdown.section > .section-title > .date-picker');
-      triggerMouseEvent(date_button, 'click');
+      triggerMouseEvent(date_button, 'click', document);
       console.log('TRIGGERED BUTTON');
 
       // casper.then(function(stats) {
@@ -132,18 +154,20 @@ casper.thenOpen('https://www.flickr.com/photos/' + user_id + '/stats').wait(4000
           })
         });
         console.log("days size is", days_buttons.length);
+
+
         for (var i = 0; i < days_buttons.length; i++) {
           block = true;
 
           console.log("scraping day button #", i+1)
       //
       //     casper.then(function() {
-          triggerMouseEvent(date_button, 'click');
+          triggerMouseEvent(date_button, 'click', document);
       //     });
       //
       //     casper.then(function(days_buttons, i) {
           days_buttons[i].focus();
-          triggerMouseEvent(days_buttons[i], 'mousedown');
+          triggerMouseEvent(days_buttons[i], 'mousedown', document);
       //     }, days_buttons, i)
       //
           setTimeout(scrapeCurrentDay(stats, block), 2000);
@@ -153,25 +177,38 @@ casper.thenOpen('https://www.flickr.com/photos/' + user_id + '/stats').wait(4000
       // }, stats)
 
       // casper.then(function() {
-      //   triggerMouseEvent(date_button, 'click')
-      // })
+      // date_button = document.querySelector('.source-breakdown-misc-wrapper > .half-source-breakdown.section > .section-title > .date-picker');
+      // console.log(date_button.innerHTML);
+      // triggerMouseEvent(date_button, 'click', document)
+      // // })
       // prev_button = document.querySelector('button.pika-prev');
-      //
+      // console.log(prev_button.innerHTML);
+      // //
       // // if we can't go back to the previous month anymore
-      // if (prev_button == null) { return; }
-      // triggerMouseEvent(prev_button, 'mousedown'); // goes to previous month
+      // if (prev_button == null) {
+      //   console.log('null previous button')
+      //   return;
+      // }
+      // prev_button.focus();
+      // triggerMouseEvent(prev_button, 'mousedown', document); // goes to previous month
+
+      // block = true;
+      // setTimeout( function() {
+      //   block = false;
+      // }, 5000);
+      // while(block) { }
+
     // }
     console.log('2');
     console.log(JSON.stringify(stats));
 
     return JSON.stringify(stats);
-  }, stats)
-
-  // this.capture('stats2.png')
+  }, stats, triggerMouseEvent)
 
 }).wait(4000);
 
 casper.then(function() {
+  this.capture('check.png')
   this.echo('3 finished stats');
   this.echo(res);
   this.echo(JSON.stringify(stats)); // doesn't work

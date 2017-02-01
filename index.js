@@ -62,7 +62,8 @@ function scrapeCurrentDay(stats, document) {
 
         var other_sources = Array.prototype.slice.apply(row.querySelector('.referrer-row-breakdown').childNodes);
         other_sources.map(function(source) {
-          var url = source.attributes.href || "No referrer";
+          var url = source.href || "No referrer";
+          console.log(url);
           var views = parseInt(source.querySelector('.header').childNodes[1].innerHTML)
           if (stats["Other"]["sources"].hasOwnProperty(url)) {
             stats["Other"]["sources"][url] += views;
@@ -152,7 +153,7 @@ casper.then(function() {
 
   var i = 0;
   var that = this;
-  this.repeat(days_in_month, function() {
+  this.repeat(days_in_month - 1, function() {
     that.then(function() {
       console.log('Clicking day index # ' + i);
 
@@ -179,6 +180,18 @@ casper.then(function() {
 casper.then(function() {
   this.capture('check.png')
   this.echo(res_arr);
+
+  var res_aggregated = res_arr.reduce(function(a, b) {
+    var res = {};
+
+    res["Flickr"]["total"] = a["Flickr"].total + b["Flickr"].total;
+    res["Other"]["total"] = a["Other"].total + b["Other"].total;
+
+    return res;
+  })
+
+
+  this.echo(res_aggregated);
   // this.echo(JSON.stringify(stats)); // doesn't work
 })
 

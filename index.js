@@ -9,6 +9,12 @@ casper.on("remote.message", function (msg) {
     console.log(msg);
 });
 
+// Print out all the error messages from the web page
+casper.on("page.error", function(msg, trace) {
+    casper.echo("[Remote Page Error] " + msg, "ERROR");
+    casper.echo("[Remote Error trace] " + JSON.stringify(trace, undefined, 4));
+});
+
 system.stderr.write('Email: ');
 var username = system.stdin.readLine();
 system.stderr.write('Password: ');
@@ -19,27 +25,23 @@ var user_id = system.stdin.readLine();
 casper.start('https://www.flickr.com/signin')
 
 casper.then(function() {
-  console.log('On login page');
-
   this.evaluate(function (user) {
-    console.log('Filling in username')
     var usernameInput = document.getElementById("login-username");
     usernameInput.value = user;
     document.getElementById('login-signin').click();
   }, username)
 // }).waitForSelector("#mbr-login-greeting");
-}).wait(5000);
+}).wait(4000);
 
 casper.then(function() {
   this.capture('password-input.png')
   this.evaluate(function(pass) {
-    console.log('Filling in password')
     var passwordInput = document.getElementById("login-passwd");
     passwordInput.value = pass;
     document.getElementById('login-signin').click();
   }, password)
 // }).waitForUrl(/flickr/);
-}).wait(5000)
+}).wait(4000)
 
 casper.then(function() {
   this.capture('main.png')
@@ -47,27 +49,34 @@ casper.then(function() {
 
 var res = "Could not fetch stats";
 
-casper.thenOpen('https://www.flickr.com/photos/' + user_id + '/stats').wait(5000).then(function() {
+var stats = {
+  "Flickr" : {
+    "total" : 0
+
+  },
+  "Other" : {
+    "total" : 0,
+    "sources" : {}
+
+  }
+}
+
+casper.thenOpen('https://www.flickr.com/photos/' + user_id + '/stats').wait(4000).then(function() {
   this.capture('stats.png');
 
-  res = this.evaluate(function() {
+  res = this.evaluate(function(stats) {
+    var block;
 
     function scrapeCurrentDay(stats) {
       var rows = Array.prototype.slice.apply(document.querySelectorAll('.sources-breakdown-list > .referrer-rows > .referrer-row'));
       rows.map(function(row) {
-        console.log('checking 2')
-        console.log(rows.length);
-
         var header = row.querySelector('.header').childNodes;
         var views = parseInt(header[1].innerHTML);
 
         console.log(views)
 
         if (views > 0) {
-          console.log("Views is greater than 0")
           var type = header[0].innerHTML;
-
-
           if (type.indexOf('flickr') !== -1) {
             stats["Flickr"].total += views;
           } else if (type.indexOf('other') !== -1) {
@@ -75,7 +84,7 @@ casper.thenOpen('https://www.flickr.com/photos/' + user_id + '/stats').wait(5000
 
             var other_sources = Array.prototype.slice.apply(row.querySelector('.referrer-row-breakdown').childNodes);
             other_sources.map(function(source) {
-              var url = source.attributes.href;
+              var url = source.attributes.href || "No referrer";
               var views = parseInt(source.querySelector('.header').childNodes[1].innerHTML)
               if (stats["Other"]["sources"].hasOwnProperty(url)) {
                 stats["Other"]["sources"][url] += views;
@@ -83,12 +92,11 @@ casper.thenOpen('https://www.flickr.com/photos/' + user_id + '/stats').wait(5000
                 stats["Other"]["sources"][url] = views;
               }
             })
-
-
-
           }
         }
       })
+
+      block = false;
     }
 
     function triggerMouseEvent (node, eventType) {
@@ -97,67 +105,76 @@ casper.thenOpen('https://www.flickr.com/photos/' + user_id + '/stats').wait(5000
       node.dispatchEvent (clickEvent);
     }
 
-    // get array of days
+
     var button = document.querySelector('.source-breakdown-misc-wrapper > .half-source-breakdown.section > .section-title > .date-picker');
-    triggerMouseEvent(button, 'click')
-    var calendar_rows = Array.prototype.slice.apply(document.querySelectorAll('.pika-lendar > table > tbody > tr'))
-    var days = [];
-    console.log("calendar_rows size is", calendar_rows.length)
-    calendar_rows.map(function(row) {
-      var tds = Array.prototype.slice.apply(row.childNodes)
-      tds.map(function(day) { days.push(day) })
-    });
-    console.log("days size is", days.length);
 
-    for (var i = days.length - 1; i >= 0; i--) {
-      if (days[i].className == "is-disabled" || days[i].className ==)
-    }
+    console.log('1');
+    console.log(JSON.stringify(stats));
 
-    var current_day;
+    var prev_button = null; // previous month button
 
+    // while(true) {
+      console.log('INSIDE WHILE');
+      var date_button = document.querySelector('.source-breakdown-misc-wrapper > .half-source-breakdown.section > .section-title > .date-picker');
+      triggerMouseEvent(date_button, 'click');
+      console.log('TRIGGERED BUTTON');
 
-    // var current_day = days.find(function(d) {
-      // return Array.prototype.slice.apply(d.classList).indexOf('is-selected') !== -1
-    // })
-    // var ind = days.indexOf(current_day);
+      // casper.then(function(stats) {
+        var calendar_rows = Array.prototype.slice.apply(document.querySelectorAll('.pika-lendar > table > tbody > tr'))
+        var days_buttons = [];
+        console.log("calendar_rows size is", calendar_rows.length)
+        calendar_rows.map(function(row) {
+          var tds = Array.prototype.slice.apply(row.childNodes)
+          tds.map(function(day) {
+            if (day.className !== "is-disabled" && day.className !== "is-empty") {
+              days_buttons.push(day.childNodes[0]);
+            }
+          })
+        });
+        console.log("days size is", days_buttons.length);
+        for (var i = 0; i < days_buttons.length; i++) {
+          block = true;
 
-    var stats = {
-      "Flickr" : {
-        "total" : 0
+          console.log("scraping day button #", i+1)
+      //
+      //     casper.then(function() {
+          triggerMouseEvent(date_button, 'click');
+      //     });
+      //
+      //     casper.then(function(days_buttons, i) {
+          days_buttons[i].focus();
+          triggerMouseEvent(days_buttons[i], 'mousedown');
+      //     }, days_buttons, i)
+      //
+          setTimeout(scrapeCurrentDay(stats, block), 2000);
+          while(block) { }
 
-      },
-      "Other" : {
-        "total" : 0,
-        "sources" : {}
+        }
+      // }, stats)
 
-      }
-    }
-
-    // get previous month button
-    var prev;
-    // while (previousbutton is not class of disabled)
-    //   if not currentmonth
-    //     click last day in month
-    //   while (current day is not disabled)
-    //     scrapeCurrentDay
-    //     go to previous day
-    //   button = new prev button
-
-    scrapeCurrentDay(stats)
-
-
-
+      // casper.then(function() {
+      //   triggerMouseEvent(date_button, 'click')
+      // })
+      // prev_button = document.querySelector('button.pika-prev');
+      //
+      // // if we can't go back to the previous month anymore
+      // if (prev_button == null) { return; }
+      // triggerMouseEvent(prev_button, 'mousedown'); // goes to previous month
+    // }
+    console.log('2');
+    console.log(JSON.stringify(stats));
 
     return JSON.stringify(stats);
-  })
+  }, stats)
 
   // this.capture('stats2.png')
 
-}).wait(5000);
+}).wait(4000);
 
 casper.then(function() {
-  console.log('finished stats');
-  console.log(res);
+  this.echo('3 finished stats');
+  this.echo(res);
+  this.echo(JSON.stringify(stats)); // doesn't work
 }).wait(5000)
 
 casper.run();

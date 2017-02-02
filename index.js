@@ -17,6 +17,7 @@ var USER_ID = system.stdin.readLine();
 
 var DEBUG_MODE = true;
 var INFO_MODE = true;
+var DURATION = 12; // months
 // TODO add options for time period of scrape (number of days?)
 
 if (INFO_MODE) {
@@ -98,11 +99,8 @@ function getDays(document, triggerMouseEvent) {
       }
     })
   });
-
   return days_buttons;
 }
-
-
 
 function clickDay(ind, triggerMouseEvent, getDays, document) {
   var days_buttons = getDays(document, triggerMouseEvent)
@@ -138,70 +136,68 @@ casper.then(function() {
 
 casper.thenOpen('https://www.flickr.com/photos/' + USER_ID + '/stats').wait(3000)
 
-// var done = false;
-// casper.repeat(12, function() {
-//
-//
-//
-// })
+var done = false;
+casper.repeat(DURATION, function() {
+  if (done) {
+    return;
+  }
 
-casper.then(function() {
-  this.evaluate(function(triggerMouseEvent, getDays, clickDay) {
-    var date_button = document.querySelector('.source-breakdown-misc-wrapper > .half-source-breakdown.section > .section-title > .date-picker');
-    triggerMouseEvent(date_button, 'click', document)
+  casper.then(function() {
+    var days_in_month = this.evaluate(function(getDays, triggerMouseEvent) {
+      return getDays(document, triggerMouseEvent).length;
+    }, getDays, triggerMouseEvent)
 
-    var prev_button = document.querySelector('button.pika-prev');
+    var i = 0;
+    var that = this;
+    this.repeat(days_in_month, function() {
+      that.then(function() {
+        that.evaluate(function(clickDay, getDays, triggerMouseEvent, i) {
+          clickDay(i, triggerMouseEvent, getDays, document);
+        }, clickDay, getDays, triggerMouseEvent, i)
+      }).wait(3000);
 
-    if (prev_button.className.indexOf("is-disabled") != -1) {
-      console.log('null previous button')
-      return;
-    }
-    prev_button.focus();
-    triggerMouseEvent(prev_button, 'mousedown', document); // goes to previous month
-    clickDay(0, triggerMouseEvent, getDays, document)
-  }, triggerMouseEvent, getDays, clickDay)
-}).wait(3000)
+      that.then(function() {
+        var res = this.evaluate(function(stats, triggerMouseEvent, scrapeCurrentDay) {
+          scrapeCurrentDay(stats, document);
+          return JSON.stringify(stats);
+        }, stats, triggerMouseEvent, scrapeCurrentDay);
 
-casper.then(function() {
+        res_arr.push(res);
+        this.echo(res);
+      }).wait(2000);
 
+      that.then(function() {
+        i++;
+      });
+    })
+  }).wait(3000);
 
+  casper.then(function() {
+    done = this.evaluate(function(triggerMouseEvent, getDays, clickDay) {
+      var date_button = document.querySelector('.source-breakdown-misc-wrapper > .half-source-breakdown.section > .section-title > .date-picker');
+      triggerMouseEvent(date_button, 'click', document)
 
-  var days_in_month = this.evaluate(function(getDays, triggerMouseEvent) {
-    return getDays(document, triggerMouseEvent).length;
-  }, getDays, triggerMouseEvent)
+      var prev_button = document.querySelector('button.pika-prev');
 
-  var i = 0;
-  var that = this;
-  this.repeat(5, function() {
-  // this.repeat(days_in_month - 1, function() {
-    that.then(function() {
-      that.evaluate(function(clickDay, getDays, triggerMouseEvent, i) {
-        clickDay(i, triggerMouseEvent, getDays, document);
-      }, clickDay, getDays, triggerMouseEvent, i)
-    }).wait(3000);
+      if (prev_button.className.indexOf("is-disabled") != -1) {
+        console.log('Last month')
+        return true;
+      }
+      prev_button.focus();
+      triggerMouseEvent(prev_button, 'mousedown', document); // goes to previous month
+      clickDay(0, triggerMouseEvent, getDays, document)
+      return false;
+    }, triggerMouseEvent, getDays, clickDay)
+  }).wait(3000)
+})
 
-    that.then(function() {
-      var res = this.evaluate(function(stats, triggerMouseEvent, scrapeCurrentDay) {
-        scrapeCurrentDay(stats, document);
-        return JSON.stringify(stats);
-      }, stats, triggerMouseEvent, scrapeCurrentDay);
-
-      res_arr.push(res);
-      this.echo(res);
-    }).wait(2000);
-
-    that.then(function() {
-      i++;
-    });
-  })
-}).wait(3000);
-
+// Format the results and write to file
 casper.then(function() {
   var parsed = JSON.parse('[' + res_arr + ']')
 
   // List sources of first object
   for (var key in parsed[0]["Other"]["sources"]) {
-    console.log('Adding new source: ', key)
+    console.log('Adding source:', key)
   }
 
   // Reduce array of objects to one object
@@ -214,7 +210,7 @@ casper.then(function() {
         if (a["Other"]["sources"][key] != undefined) {
           a["Other"]["sources"][key] = a["Other"]["sources"][key] + b["Other"].sources[key];
         } else {
-          console.log('Adding new source: ', key)
+          console.log('Adding source:', key)
           a["Other"]["sources"][key] = b["Other"].sources[key];
         }
       }
@@ -232,7 +228,7 @@ casper.then(function() {
   var filename = "data-" + year + "-" + month + "-" + day+".json";
   var filepath = fs.pathJoin(fs.workingDirectory, filename);
 
-  fs.write(filepath, JSON.stringify(result), 'w');
+  fs.write(filepath, JSON.stringify(result, null, 2), 'w');
 });
 
 casper.run();

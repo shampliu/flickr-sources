@@ -5,16 +5,19 @@ var fs = require('fs');
 var system = require('system');
 var casper = require('casper').create();
 
-// Globals
+// TODO add Google Chrome browser agent
 
+// Global Configs
 system.stderr.write('Email: ');
 var USERNAME = system.stdin.readLine();
 system.stderr.write('Password: ');
 var PASSWORD = system.stdin.readLine();
 system.stderr.write('User ID: ');
 var USER_ID = system.stdin.readLine();
-var DEBUG_MODE = false;
+
+var DEBUG_MODE = true;
 var INFO_MODE = true;
+// TODO add options for time period of scrape (number of days?)
 
 if (INFO_MODE) {
   // For console.log statements from inside evaluate()
@@ -31,9 +34,8 @@ if (DEBUG_MODE) {
   });
 }
 
-// var res; // JSON string
+// Runtime Globals
 var res_arr = [];
-
 var stats = {
   "Flickr" : {
     "total" : 0
@@ -42,7 +44,6 @@ var stats = {
   "Other" : {
     "total" : 0,
     "sources" : {}
-
   }
 }
 
@@ -52,6 +53,7 @@ function triggerMouseEvent (node, eventType, document) {
   node.dispatchEvent (clickEvent);
 }
 
+// TODO take out stats from args
 function scrapeCurrentDay(stats, document) {
   var rows = Array.prototype.slice.apply(document.querySelectorAll('.sources-breakdown-list > .referrer-rows > .referrer-row'));
   rows.map(function(row) {
@@ -105,7 +107,7 @@ function getDays(document, triggerMouseEvent) {
 function clickDay(ind, triggerMouseEvent, getDays, document) {
   var days_buttons = getDays(document, triggerMouseEvent)
 
-  console.log("Clicking day index # " + ind + " out of " + days_buttons.length + " days");
+  console.log("Retrieving stats for " + "January" + " " + days_buttons[ind].innerHTML); // TODO support current month
   days_buttons[ind].focus();
   triggerMouseEvent(days_buttons[ind], 'mousedown', document)
 }
@@ -136,18 +138,24 @@ casper.then(function() {
 
 casper.thenOpen('https://www.flickr.com/photos/' + USER_ID + '/stats').wait(3000)
 
+// var done = false;
+// casper.repeat(12, function() {
+//
+//
+//
+// })
+
 casper.then(function() {
   this.evaluate(function(triggerMouseEvent, getDays, clickDay) {
     var date_button = document.querySelector('.source-breakdown-misc-wrapper > .half-source-breakdown.section > .section-title > .date-picker');
     triggerMouseEvent(date_button, 'click', document)
 
     var prev_button = document.querySelector('button.pika-prev');
-    // //
-    // // if we can't go back to the previous month anymore
-    // if (prev_button == null) {
-    //   console.log('null previous button')
-    //   return;
-    // }
+
+    if (prev_button.className.indexOf("is-disabled") != -1) {
+      console.log('null previous button')
+      return;
+    }
     prev_button.focus();
     triggerMouseEvent(prev_button, 'mousedown', document); // goes to previous month
     clickDay(0, triggerMouseEvent, getDays, document)
@@ -155,11 +163,12 @@ casper.then(function() {
 }).wait(3000)
 
 casper.then(function() {
+
+
+
   var days_in_month = this.evaluate(function(getDays, triggerMouseEvent) {
     return getDays(document, triggerMouseEvent).length;
   }, getDays, triggerMouseEvent)
-
-  this.echo("Number of days in month is " + days_in_month);
 
   var i = 0;
   var that = this;
@@ -181,44 +190,35 @@ casper.then(function() {
       this.echo(res);
     }).wait(2000);
 
-    i++;
+    that.then(function() {
+      i++;
+    });
   })
 }).wait(3000);
 
 casper.then(function() {
-  this.echo(res_arr);
-
-  this.echo(res_arr.length);
-
   var parsed = JSON.parse('[' + res_arr + ']')
-  console.log(JSON.stringify(parsed))
 
+  // List sources of first object
+  for (var key in parsed[0]["Other"]["sources"]) {
+    console.log('Adding new source: ', key)
+  }
+
+  // Reduce array of objects to one object
   var result = parsed.reduce(function(a, b) {
     a["Flickr"].total += b["Flickr"].total;
     a["Other"].total += b["Other"].total;
 
     if (b["Other"].total > 0) {
       for (var key in b["Other"].sources) {
-        console.log("key is ", key)
         if (a["Other"]["sources"][key] != undefined) {
-          console.log('already have key and it is')
-          console.log(a["Other"].sources[key])
           a["Other"]["sources"][key] = a["Other"]["sources"][key] + b["Other"].sources[key];
-
-          console.log('now its')
-          console.log(a["Other"].sources[key])
         } else {
-          console.log('dont already have key, it is currently')
-          console.log(a["Other"].sources[key])
-
+          console.log('Adding new source: ', key)
           a["Other"]["sources"][key] = b["Other"].sources[key];
-          console.log('now its')
-          console.log(a["Other"].sources[key])
         }
-
       }
     }
-
     return a;
   })
 
@@ -233,6 +233,6 @@ casper.then(function() {
   var filepath = fs.pathJoin(fs.workingDirectory, filename);
 
   fs.write(filepath, JSON.stringify(result), 'w');
-}).wait(5000)
+});
 
 casper.run();

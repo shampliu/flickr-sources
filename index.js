@@ -1,28 +1,35 @@
 phantom.casperPath = 'node_modules/casperjs';
 phantom.injectJs('/node_modules/casperjs/bin/bootstrap.js');
 
+var fs = require('fs');
 var system = require('system');
 var casper = require('casper').create();
-
-// For console.log statements from inside evaluate()
-casper.on("remote.message", function (msg) {
-    console.log(msg);
-});
-
-// Print out all the error messages from the web page
-casper.on("page.error", function(msg, trace) {
-    casper.echo("[Remote Page Error] " + msg, "ERROR");
-    casper.echo("[Remote Error trace] " + JSON.stringify(trace, undefined, 4));
-});
 
 // Globals
 
 system.stderr.write('Email: ');
-var username = system.stdin.readLine();
+var USERNAME = system.stdin.readLine();
 system.stderr.write('Password: ');
-var password = system.stdin.readLine();
+var PASSWORD = system.stdin.readLine();
 system.stderr.write('User ID: ');
-var user_id = system.stdin.readLine();
+var USER_ID = system.stdin.readLine();
+var DEBUG_MODE = false;
+var INFO_MODE = true;
+
+if (INFO_MODE) {
+  // For console.log statements from inside evaluate()
+  casper.on("remote.message", function (msg) {
+      console.log(msg);
+  });
+}
+
+if (DEBUG_MODE) {
+  // Print out all the error messages from the web page
+  casper.on("page.error", function(msg, trace) {
+    casper.echo("[Remote Page Error] " + msg, "ERROR");
+    casper.echo("[Remote Error trace] " + JSON.stringify(trace, undefined, 4));
+  });
+}
 
 // var res; // JSON string
 var res_arr = [];
@@ -51,8 +58,6 @@ function scrapeCurrentDay(stats, document) {
     var header = row.querySelector('.header').childNodes;
     var views = parseInt(header[1].innerHTML);
 
-    console.log(views)
-
     if (views > 0) {
       var type = header[0].innerHTML;
       if (type.indexOf('flickr') !== -1) {
@@ -63,7 +68,6 @@ function scrapeCurrentDay(stats, document) {
         var other_sources = Array.prototype.slice.apply(row.querySelector('.referrer-row-breakdown').childNodes);
         other_sources.map(function(source) {
           var url = source.href || "No referrer";
-          console.log(url);
           var views = parseInt(source.querySelector('.header').childNodes[1].innerHTML)
           if (stats["Other"]["sources"].hasOwnProperty(url)) {
             stats["Other"]["sources"][url] += views;
@@ -96,6 +100,8 @@ function getDays(document, triggerMouseEvent) {
   return days_buttons;
 }
 
+
+
 function clickDay(ind, triggerMouseEvent, getDays, document) {
   var days_buttons = getDays(document, triggerMouseEvent)
 
@@ -111,20 +117,24 @@ casper.then(function() {
     var usernameInput = document.getElementById("login-username");
     usernameInput.value = user;
     document.getElementById('login-signin').click();
-  }, username)
-// }).waitForSelector("#mbr-login-greeting");
-}).wait(4000);
+  }, USERNAME)
+}).waitFor(function() {
+  return this.evaluate(function() {
+    return document.getElementById("login-passwd") != null;
+  });
+})
+// }).wait(4000);
 
 casper.then(function() {
   this.evaluate(function(pass) {
     var passwordInput = document.getElementById("login-passwd");
     passwordInput.value = pass;
     document.getElementById('login-signin').click();
-  }, password)
-// }).waitForUrl(/flickr/);
-}).wait(4000)
+  }, PASSWORD)
+// }).waitForUrl(/^https://flickr.com/);
+}).wait(3000)
 
-casper.thenOpen('https://www.flickr.com/photos/' + user_id + '/stats').wait(3000)
+casper.thenOpen('https://www.flickr.com/photos/' + USER_ID + '/stats').wait(3000)
 
 casper.then(function() {
   this.evaluate(function(triggerMouseEvent, getDays, clickDay) {
@@ -153,17 +163,15 @@ casper.then(function() {
 
   var i = 0;
   var that = this;
-  this.repeat(days_in_month - 1, function() {
+  this.repeat(5, function() {
+  // this.repeat(days_in_month - 1, function() {
     that.then(function() {
-      console.log('Clicking day index # ' + i);
-
       that.evaluate(function(clickDay, getDays, triggerMouseEvent, i) {
         clickDay(i, triggerMouseEvent, getDays, document);
-
       }, clickDay, getDays, triggerMouseEvent, i)
     }).wait(3000);
 
-    casper.then(function() {
+    that.then(function() {
       var res = this.evaluate(function(stats, triggerMouseEvent, scrapeCurrentDay) {
         scrapeCurrentDay(stats, document);
         return JSON.stringify(stats);
@@ -171,28 +179,60 @@ casper.then(function() {
 
       res_arr.push(res);
       this.echo(res);
-    }).wait(3000);
+    }).wait(2000);
 
     i++;
   })
 }).wait(3000);
 
 casper.then(function() {
-  this.capture('check.png')
   this.echo(res_arr);
 
-  var res_aggregated = res_arr.reduce(function(a, b) {
-    var res = {};
+  this.echo(res_arr.length);
 
-    res["Flickr"]["total"] = a["Flickr"].total + b["Flickr"].total;
-    res["Other"]["total"] = a["Other"].total + b["Other"].total;
+  var parsed = JSON.parse('[' + res_arr + ']')
+  console.log(JSON.stringify(parsed))
 
-    return res;
+  var result = parsed.reduce(function(a, b) {
+    a["Flickr"].total += b["Flickr"].total;
+    a["Other"].total += b["Other"].total;
+
+    if (b["Other"].total > 0) {
+      for (var key in b["Other"].sources) {
+        console.log("key is ", key)
+        if (a["Other"]["sources"][key] != undefined) {
+          console.log('already have key and it is')
+          console.log(a["Other"].sources[key])
+          a["Other"]["sources"][key] = a["Other"]["sources"][key] + b["Other"].sources[key];
+
+          console.log('now its')
+          console.log(a["Other"].sources[key])
+        } else {
+          console.log('dont already have key, it is currently')
+          console.log(a["Other"].sources[key])
+
+          a["Other"]["sources"][key] = b["Other"].sources[key];
+          console.log('now its')
+          console.log(a["Other"].sources[key])
+        }
+
+      }
+    }
+
+    return a;
   })
 
+  this.echo(JSON.stringify(result));
 
-  this.echo(res_aggregated);
-  // this.echo(JSON.stringify(stats)); // doesn't work
-})
+  // Write results to JSON file
+  var today = new Date();
+  var month = today.getMonth() + 1;
+  var day = today.getDate();
+  var year = today.getFullYear();
+  var filename = "data-" + year + "-" + month + "-" + day+".json";
+  var filepath = fs.pathJoin(fs.workingDirectory, filename);
+
+  fs.write(filepath, JSON.stringify(result), 'w');
+}).wait(5000)
 
 casper.run();
